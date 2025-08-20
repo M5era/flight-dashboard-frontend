@@ -1,9 +1,9 @@
-a {
-a:hover {
-h1 {
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+button {
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
@@ -19,6 +19,7 @@ button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
+
 
 @media (prefers-color-scheme: light) {
   :root {
