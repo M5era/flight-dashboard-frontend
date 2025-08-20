@@ -1,5 +1,5 @@
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { fetchFlights } from './api';
 import type { FlightSegment } from './api';
 import './App.css';
@@ -14,8 +14,7 @@ function App() {
   const [arrQuery, setArrQuery] = useState('');
   const [depOptions, setDepOptions] = useState<Airport[]>([]);
   const [arrOptions, setArrOptions] = useState<Airport[]>([]);
-  const depTimeout = useRef<number | null>(null);
-  const arrTimeout = useRef<number | null>(null);
+
   // Fetch airport suggestions from backend
   const fetchAirportOptions = async (q: string) => {
     if (!q) return [];
