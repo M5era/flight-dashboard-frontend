@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchFlights } from './api';
+import { hashItinerary } from './api';
 import type { FlightSegment } from './api';
 import './App.css';
 
@@ -7,18 +9,68 @@ import './App.css';
 type Airport = { code: string; iata?: string; name: string; city?: string };
 
 function App() {
+  // Track favorited flights by index or id
+  const [favorited, setFavorited] = useState<{[key: string]: boolean}>({});
+
+  // Toggle favorite state and sync with backend
+  const toggleFavorite = (flightId: string | number, flight: FlightSegment) => {
+    // Update UI immediately
+    setFavorited(prev => ({ ...prev, [flightId]: !prev[flightId] }));
+    // Then perform request in background
+    if (!favorited[flightId]) {
+      import('./api').then(api => api.saveFlight(flight)).catch(e => {
+        alert('Failed to save flight: ' + (e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e)));
+        // Optionally revert UI if needed
+      });
+    } else {
+      async function saveFlight(itinerary: object) {
+        const id = await hashItinerary(itinerary);
+        // Save flight with id
+        // ...existing save logic...
+      }
+
+      import('./api').then(api => api.deleteSavedFlight(String(flightId))).catch(e => {
+        alert('Failed to delete saved flight: ' + (e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e)));
+        // Optionally revert UI if needed
+      });
+    }
+  }
   const [departure, setDeparture] = useState('JFK');
   const [arrival, setArrival] = useState('LAX');
   const [depQuery, setDepQuery] = useState('');
   const [arrQuery, setArrQuery] = useState('');
   const [depOptions, setDepOptions] = useState<Airport[]>([]);
   const [arrOptions, setArrOptions] = useState<Airport[]>([]);
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [flights, setFlights] = useState<FlightSegment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setIsAuthenticated(false);
+    navigate('/');
+  };
+
 
   // Fetch airport suggestions from backend
   const fetchAirportOptions = async (q: string) => {
     if (!q) return [];
     try {
-      const res = await fetch(`/api/airports/search?q=${encodeURIComponent(q)}`);
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(q)}`);
       if (!res.ok) return [];
       const data = await res.json();
       // Expecting array of airports with code, name, city
@@ -53,11 +105,6 @@ function App() {
     setArrQuery(`${a.iata || a.code}${a.city ? ' - ' + a.city : ''}`);
     setArrOptions([]);
   };
-  const [date, setDate] = useState('2025-08-21');
-  const [flights, setFlights] = useState<FlightSegment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // No cache badge state needed
 
   // Helper for cache key
   const getCacheKey = (dep: string, arr: string, d: string) => `${dep}-${arr}-${d}`;
@@ -94,7 +141,69 @@ function App() {
   };
 
   return (
-  <div className="app-container" style={{ minHeight: '100vh', background: '#edf1fd', padding: 0, margin: 0, fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif' }}>
+    <div className="app-container" style={{ minHeight: '100vh', background: '#edf1fd', padding: 0, margin: 0, fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif' }}>
+      <nav style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '24px 0 0 0', background: 'transparent', boxShadow: 'none', minHeight: 60 }}>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginRight: 32 }}>
+          {isAuthenticated ? (
+            <>
+              <Link to="/saved-flights" style={{
+                textDecoration: 'none',
+                color: '#2563eb',
+                fontWeight: 600,
+                fontSize: 22,
+                background: 'none',
+                border: 'none',
+                padding: '8px 18px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}>My Flights</Link>
+              <button onClick={handleLogout} style={{
+                background: '#e5e7eb',
+                color: '#213547',
+                fontWeight: 600,
+                fontSize: 22,
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 24px',
+                cursor: 'pointer',
+                marginLeft: 0,
+                boxShadow: 'none',
+                transition: 'background 0.2s',
+              }}>Logout</button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" style={{
+                textDecoration: 'none',
+                color: '#213547',
+                fontWeight: 600,
+                fontSize: 22,
+                background: '#e5e7eb',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 24px',
+                cursor: 'pointer',
+                marginLeft: 0,
+                boxShadow: 'none',
+                transition: 'background 0.2s',
+              }}>Log in</Link>
+              <Link to="/saved-flights" style={{
+                textDecoration: 'none',
+                color: '#2563eb',
+                fontWeight: 600,
+                fontSize: 22,
+                background: 'none',
+                border: 'none',
+                padding: '8px 18px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}>My Flights</Link>
+            </>
+          )}
+        </div>
+      </nav>
       <h1
         style={{
           textAlign: 'center',
@@ -134,11 +243,10 @@ function App() {
             style={{
               width: 320,
               padding: '12px 16px',
-              fontSize: 18,
-              border: '1.5px solid #bfc7d1',
-              borderRadius: 8,
-              outline: 'none',
-              marginBottom: 0,
+                fontSize: 22,
+                background: 'none',
+                border: 'none',
+                borderRadius: 8,
               boxSizing: 'border-box',
             }}
             autoComplete="off"
@@ -164,11 +272,10 @@ function App() {
                   style={{
                     padding: '14px 20px',
                     cursor: 'pointer',
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    borderBottom: '1px solid #f0f2f5',
-                    transition: 'background 0.2s',
+                    fontSize: 22,
+                    background: '#e5e7eb',
+                    border: 'none',
+                    borderRadius: 8,
                   }}
                   onClick={() => selectDep(a)}
                   onMouseOver={e => (e.currentTarget.style.background = '#f3f6fa')}
@@ -191,11 +298,10 @@ function App() {
             style={{
               width: 320,
               padding: '12px 16px',
-              fontSize: 18,
-              border: '1.5px solid #bfc7d1',
-              borderRadius: 8,
-              outline: 'none',
-              marginBottom: 0,
+                fontSize: 22,
+                background: '#e5e7eb',
+                border: 'none',
+                borderRadius: 8,
               boxSizing: 'border-box',
             }}
             autoComplete="off"
@@ -221,11 +327,10 @@ function App() {
                   style={{
                     padding: '14px 20px',
                     cursor: 'pointer',
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    borderBottom: '1px solid #f0f2f5',
-                    transition: 'background 0.2s',
+                    fontSize: 22,
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: 8,
                   }}
                   onClick={() => selectArr(a)}
                   onMouseOver={e => (e.currentTarget.style.background = '#f3f6fa')}
@@ -287,7 +392,7 @@ function App() {
   {error && <div className="error" style={{ color: '#dc2626', textAlign: 'center', marginTop: 16, fontSize: 18 }}>{error}</div>}
       <div className="results" style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px' }}>
         {/* No cache badge */}
-        {flights.length > 0 ? (
+  {Array.isArray(flights) && flights.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'center', marginTop: 32 }}>
             {flights.map((flight, idx) => {
               const numSegments = flight.segments ? flight.segments.length : 1;
@@ -317,11 +422,10 @@ function App() {
               let stopoverLabel = 'Nonstop';
               if (stopovers === 1) stopoverLabel = '1 Stopover';
               else if (stopovers > 1) stopoverLabel = `${stopovers} Stopovers`;
-              const showRedDot = stopovers > 0;
               return (
                 <div
                   className="flight-card"
-                  key={idx}
+                  key={flight.id || idx}
                   style={{
                     background: 'rgba(255,255,255,0.97)',
                     boxShadow: '0 4px 24px 0 rgba(60,80,120,0.10)',
@@ -339,54 +443,79 @@ function App() {
                 >
                   {/* Main flight info */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          {/* Airline - far left */}
-          <div style={{ flex: '0 0 160px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, marginRight: 32 }}>
-            <div style={{ fontWeight: 700, fontSize: 22, color: '#3730a3' }}>{flight.airline}</div>
-          </div>
-          {/* Departure */}
-          <div style={{ textAlign: 'right', minWidth: 60, flexShrink: 1, marginRight: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 18 }}>{depTime}</div>
-          </div>
-          {/* Line with airplane and red dots for stopovers, then emoji and duration */}
-          <div style={{ display: 'flex', alignItems: 'center', minWidth: 120, marginRight: 16 }}>
-            <div style={{ position: 'relative', width: '120px', height: 32, display: 'flex', alignItems: 'center' }}>
-              <div style={{ position: 'absolute', left: 0, top: '50%', width: '100px', height: 4, background: '#e0e7ef', borderRadius: 2, transform: 'translateY(-50%)' }}></div>
-              {stopovers > 0 && Array.from({ length: stopovers }).map((_, i) => {
-                // Center the red dot on the line
-                const percent = ((i + 1) / (stopovers + 1)) * 100;
-                return (
-                  <div key={i} style={{ position: 'absolute', left: `calc(${percent}% - 6px)`, top: '50%', transform: 'translate(-50%, -50%)', width: 12, height: 12, background: '#dc2626', borderRadius: '50%', zIndex: 2 }}></div>
-                );
-              })}
-            </div>
-            <span style={{ marginLeft: 12, marginRight: 12, fontSize: 24 }}>✈️</span>
-            <div style={{ color: '#64748b', fontSize: 16, minWidth: 60 }}>{formatDuration(flight.duration)}</div>
-          </div>
-          {/* Arrival */}
-          <div style={{ textAlign: 'left', minWidth: 80, marginRight: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 18 }}>{arrTime}{plusOne}</div>
-          </div>
-          {/* Vertical divider spanning almost full height of card */}
-          <div style={{ width: 1, height: 'calc(100% - 32px)', background: '#e0e7ef', margin: '0 32px', alignSelf: 'center' }}></div>
-        </div>
-        {/* Stopover and duration info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
-          <div style={{ color: stopovers > 0 ? '#dc2626' : '#059669', fontWeight: 600, fontSize: 16 }}>{stopoverLabel}</div>
-        </div>
-      </div>
-      {/* Airline */}
-      {/* Airline removed from here, now at far left above */}
-      {/* Price and button */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginLeft: 32 }}>
-        <div style={{ color: '#059669', fontWeight: 700, fontSize: 22, textAlign: 'center', width: '100%' }}>&euro;{Math.ceil(flight.price)}</div>
-          <button
-            style={{ background: '#2563eb', color: '#fff', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', boxShadow: '0 2px 8px 0 rgba(60,80,120,0.10)', outline: 'none', display: 'block', margin: '0 auto' }}
-            onClick={() => window.open('https://www.flightradar24.com/38.73,-9.14/6', '_blank', 'noopener,noreferrer')}
-          >
-            Check
-          </button>
-      </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      {/* Airline - far left */}
+                      <div style={{ flex: '0 0 160px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, marginRight: 32 }}>
+                        <div style={{ fontWeight: 700, fontSize: 22, color: '#3730a3' }}>{flight.airline}</div>
+                      </div>
+                      {/* Departure */}
+                      <div style={{ textAlign: 'right', minWidth: 60, flexShrink: 1, marginRight: 16 }}>
+                        <div style={{ fontWeight: 700, fontSize: 18 }}>{depTime}</div>
+                      </div>
+                      {/* Line with airplane and red dots for stopovers, then emoji and duration */}
+                      <div style={{ display: 'flex', alignItems: 'center', minWidth: 120, marginRight: 16 }}>
+                        <div style={{ position: 'relative', width: '120px', height: 32, display: 'flex', alignItems: 'center' }}>
+                          <div style={{ position: 'absolute', left: 0, top: '50%', width: '100px', height: 4, background: '#e0e7ef', borderRadius: 2, transform: 'translateY(-50%)' }}></div>
+                          {stopovers > 0 && Array.from({ length: stopovers }).map((_, i) => {
+                            // Center the red dot on the line
+                            const percent = ((i + 1) / (stopovers + 1)) * 100;
+                            return (
+                              <div key={i} style={{ position: 'absolute', left: `calc(${percent}% - 6px)`, top: '50%', transform: 'translate(-50%, -50%)', width: 12, height: 12, background: '#dc2626', borderRadius: '50%', zIndex: 2 }}></div>
+                            );
+                          })}
+                        </div>
+                        <span style={{ marginLeft: 12, marginRight: 12, fontSize: 24 }}>✈️</span>
+                        <div style={{ color: '#64748b', fontSize: 16, minWidth: 60 }}>{formatDuration(flight.duration)}</div>
+                      </div>
+                      {/* Arrival */}
+                      <div style={{ textAlign: 'left', minWidth: 80, marginRight: 16 }}>
+                        <div style={{ fontWeight: 700, fontSize: 18 }}>{arrTime}{plusOne}</div>
+                      </div>
+                      {/* Vertical divider spanning almost full height of card */}
+                      <div style={{ width: 1, height: 'calc(100% - 32px)', background: '#e0e7ef', margin: '0 32px', alignSelf: 'center' }}></div>
+                    </div>
+                    {/* Stopover and duration info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+                      <div style={{ color: stopovers > 0 ? '#dc2626' : '#059669', fontWeight: 600, fontSize: 16 }}>{stopoverLabel}</div>
+                    </div>
+                  </div>
+                  {/* Price, Check button, Heart button */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginLeft: 32, position: 'relative', height: '100%', justifyContent: 'center' }}>
+                    <div style={{ color: '#059669', fontWeight: 700, fontSize: 22, textAlign: 'center', width: '100%' }}>&euro;{Math.ceil(flight.price)}</div>
+                    <button
+                      style={{ background: '#2563eb', color: '#fff', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', boxShadow: '0 2px 8px 0 rgba(60,80,120,0.10)', outline: 'none', display: 'block', margin: '0 auto' }}
+                      onClick={() => window.open('https://www.flightradar24.com/38.73,-9.14/6', '_blank', 'noopener,noreferrer')}
+                    >
+                      Check
+                    </button>
+                  </div>
+                  {/* Heart button */}
+                  <div style={{ display: 'flex', alignItems: 'center', height: '100%', marginLeft: 24 }}>
+                    <button
+                      aria-label={favorited[flight.id || idx] ? 'Unfavorite' : 'Favorite'}
+                      onClick={() => toggleFavorite(flight.id || idx, flight)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        marginLeft: 8,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 40,
+                        height: 40,
+                        outline: 'none',
+                        boxShadow: 'none',
+                      }}
+                    >
+                      <img
+                        src={favorited[flight.id || idx] ? '/icons/icon-saved.png' : '/icons/icon-unsaved.png'}
+                        alt={favorited[flight.id || idx] ? 'Saved' : 'Unsaved'}
+                        style={{ width: 24, height: 24, objectFit: 'contain', display: 'block' }}
+                      />
+                    </button>
+                  </div>
                 </div>
               );
             })}

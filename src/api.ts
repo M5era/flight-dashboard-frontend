@@ -1,57 +1,209 @@
+// Utility to hash itinerary data using SHA-256
+export async function hashItinerary(itinerary: object): Promise<string> {
+  const data = JSON.stringify(itinerary);
+  const encoder = new TextEncoder();
+  const buffer = encoder.encode(data);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 // src/api.ts
 
+// Define the structure of a flight segment based on your backend response
 export interface FlightSegment {
+  id: string; // Unique ID for the flight offer
+  price: number;
   airline: string;
-  flightNumber: string;
+  duration: string;
   departureTime: string;
   arrivalTime: string;
-  duration: string;
-  price: number;
-  segments?: FlightSegment[];
+  origin: string;
+  destination: string;
+  segments: Array<{
+    carrierCode: string;
+    number: string;
+    departure: { iataCode: string; at: string };
+    arrival: { iataCode: string; at: string };
+    duration: string;
+  }>;
 }
 
-export interface FlightSearchResponse {
+// Define the structure for the API response
+export interface FlightData {
   flights: FlightSegment[];
 }
-   // 'https://flight-track-fxe8hne7c6hhc6c0.germanywestcentral-01.azurewebsites.net/api/flights',
 
-export async function fetchFlights(departure: string, arrival: string, date: string): Promise<FlightSearchResponse> {
-  const response = await fetch(
-    'http://localhost:7071/api/flights',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        originLocationCode: departure,
-        destinationLocationCode: arrival,
-        departureDateTimeRange: { date },
-      }),
-    }
-  );
-  if (!response.ok) throw new Error('Failed to fetch flights');
-  const apiData = await response.json();
-  // Map API data to FlightSegment[]
-  const flights: FlightSegment[] = (apiData.data || []).map((offer: any) => {
-    const itinerary = offer.itineraries[0];
-    const segments = itinerary.segments.map((seg: any) => ({
-      airline: apiData.dictionaries?.carriers?.[seg.carrierCode] || seg.carrierCode,
-      flightNumber: seg.number,
-      departureTime: seg.departure.at,
-      arrivalTime: seg.arrival.at,
-      duration: seg.duration,
-      price: Number(offer.price?.grandTotal || offer.price?.total || 0),
-    }));
-    return {
-      airline: apiData.dictionaries?.carriers?.[offer.validatingAirlineCodes?.[0]] || offer.validatingAirlineCodes?.[0] || '',
-      flightNumber: segments.map((s: any) => s.flightNumber).join(', '),
-      departureTime: segments[0]?.departureTime,
-      arrivalTime: segments[segments.length - 1]?.arrivalTime,
-      duration: itinerary.duration,
-      price: Number(offer.price?.grandTotal || offer.price?.total || 0),
-      segments,
-    };
-  });
-  return { flights };
+// Define the structure for a saved flight
+export interface SavedFlight extends FlightSegment {
+  savedAt: string;
 }
+
+// Define the structure for a recent search
+export interface RecentSearch {
+  id: string;
+  origin: string;
+  destination: string;
+  date: string;
+  createdAt: string;
+}
+
+// Helper to get the auth token from localStorage
+const getToken = () => localStorage.getItem('token');
+
+// Fetch flights from your backend
+export const fetchFlights = async (departure: string, arrival: string, date: string): Promise<FlightData> => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const body = {
+    originLocationCode: departure,
+    destinationLocationCode: arrival,
+    departureDateTimeRange: { date: date },
+  };
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const response = await fetch(`${apiUrl}/api/flights`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch flights' }));
+    throw new Error(errorData.message || 'Failed to fetch flights');
+  }
+
+  const json = await response.json();
+  console.log('[fetchFlights] raw response json:', json);
+
+  // Backend may return either an array directly OR an object with a `data` array
+  const rawFlights: any[] = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+
+  if (!Array.isArray(rawFlights)) {
+    console.warn('[fetchFlights] Unexpected flights payload shape, returning empty list');
+    return { flights: [] };
+  }
+
+  const adaptedFlights: FlightSegment[] = rawFlights.map((flight: any) => {
+    try {
+      const firstItin = flight.itineraries?.[0];
+      const segments = firstItin?.segments || [];
+      const firstSeg = segments[0] || {};
+      const lastSeg = segments[segments.length - 1] || firstSeg;
+      return {
+        id: String(flight.id ?? crypto.randomUUID()),
+        price: parseFloat(flight?.price?.grandTotal) || 0,
+        airline: flight?.validatingAirlineCodes?.[0] || 'NA',
+        duration: firstItin?.duration || '',
+        departureTime: firstSeg?.departure?.at || '',
+        arrivalTime: lastSeg?.arrival?.at || '',
+        origin: firstSeg?.departure?.iataCode || '',
+        destination: lastSeg?.arrival?.iataCode || '',
+        segments: segments,
+      } as FlightSegment;
+    } catch (e) {
+      console.warn('[fetchFlights] Failed to adapt flight offer', e, flight);
+      return null as any;
+    }
+  }).filter(Boolean);
+
+  return { flights: adaptedFlights };
+};
+
+// Save a flight for a user
+export const saveFlight = async (flight: FlightSegment): Promise<any> => {
+  const token = getToken();
+  if (!token) throw new Error('You must be logged in to save flights.');
+
+  // The endpoint seems to be /api/user/saved-flights from your curl command
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const response = await fetch(`${apiUrl}/api/user/saved-flights`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    // The backend expects the original flight object, not a simplified one
+    body: JSON.stringify(flight),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Failed to save flight.');
+  }
+  return response.json();
+};
+
+// Get all saved flights for a user
+export const getSavedFlights = async (): Promise<SavedFlight[]> => {
+  const token = getToken();
+  if (!token) return [];
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const response = await fetch(`${apiUrl}/api/user/saved-flights`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get saved flights.');
+  }
+  return response.json();
+};
+
+// Delete a saved flight
+export const deleteSavedFlight = async (flightId: string): Promise<any> => {
+  const token = getToken();
+  if (!token) throw new Error('Authentication error.');
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const response = await fetch(`${apiUrl}/api/user/saved-flights/${flightId}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to delete flight.');
+  }
+  return response.json();
+};
+
+// Get recent searches for a user
+export const getRecentSearches = async (): Promise<RecentSearch[]> => {
+  const token = getToken();
+  if (!token) return [];
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const response = await fetch(`${apiUrl}/api/user/recent-searches`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get recent searches.');
+  }
+  return response.json();
+};
+
+// This function seems to be for airport search, which is public
+export const fetchAirportOptions = async (q: string) => {
+    if (!q) return [];
+    try {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data || []).slice(0, 10);
+    } catch {
+      return [];
+    }
+};
