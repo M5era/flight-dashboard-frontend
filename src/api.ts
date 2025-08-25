@@ -13,10 +13,11 @@ export interface FlightSegment {
 export interface FlightSearchResponse {
   flights: FlightSegment[];
 }
+   // 'https://flight-track-fxe8hne7c6hhc6c0.germanywestcentral-01.azurewebsites.net/api/flights',
 
 export async function fetchFlights(departure: string, arrival: string, date: string): Promise<FlightSearchResponse> {
   const response = await fetch(
-    'https://flight-track-fxe8hne7c6hhc6c0.germanywestcentral-01.azurewebsites.net/api/flights',
+    'http://localhost:7071/api/flights',
     {
       method: 'POST',
       headers: {

@@ -1,5 +1,5 @@
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { fetchFlights } from './api';
 import type { FlightSegment } from './api';
 import './App.css';
@@ -14,8 +14,7 @@ function App() {
   const [arrQuery, setArrQuery] = useState('');
   const [depOptions, setDepOptions] = useState<Airport[]>([]);
   const [arrOptions, setArrOptions] = useState<Airport[]>([]);
-  const depTimeout = useRef<number | null>(null);
-  const arrTimeout = useRef<number | null>(null);
+
   // Fetch airport suggestions from backend
   const fetchAirportOptions = async (q: string) => {
     if (!q) return [];
@@ -30,24 +29,18 @@ function App() {
     }
   };
 
-  // Handlers for input changes with debounce
-  const handleDepInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handlers for input changes (no debounce, fetch on every character)
+  const handleDepInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setDepQuery(val);
-    if (depTimeout.current) clearTimeout(depTimeout.current);
-    depTimeout.current = setTimeout(async () => {
-      const opts = await fetchAirportOptions(val);
-      setDepOptions(opts);
-    }, 300);
+    const opts = await fetchAirportOptions(val);
+    setDepOptions(opts);
   };
-  const handleArrInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleArrInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setArrQuery(val);
-    if (arrTimeout.current) clearTimeout(arrTimeout.current);
-    arrTimeout.current = setTimeout(async () => {
-      const opts = await fetchAirportOptions(val);
-      setArrOptions(opts);
-    }, 300);
+    const opts = await fetchAirportOptions(val);
+    setArrOptions(opts);
   };
 
   // When user selects an option
@@ -102,7 +95,7 @@ function App() {
   };
 
   return (
-  <div className="app-container" style={{ minHeight: '100vh', background: 'linear-gradient(120deg, #e0e7ff 0%, #f8fafc 100%)', padding: 0, margin: 0, fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif' }}>
+  <div className="app-container" style={{ minHeight: '100vh', background: '#edf1fd', padding: 0, margin: 0, fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif' }}>
       <h1 style={{ textAlign: 'center', fontSize: 48, fontWeight: 800, color: '#1a2233', margin: '48px 0 32px 0', letterSpacing: -2 }}>Flight Dashboard</h1>
       <div
         className="search-form"
@@ -112,8 +105,7 @@ function App() {
           alignItems: 'center',
           justifyContent: 'center',
           gap: 24,
-          background: '#fff',
-          borderRadius: 20,
+          background: 'rgba(255,255,255,0.95)',
           boxShadow: '0 8px 32px 0 rgba(60,80,120,0.10)',
           padding: '32px 32px 24px 32px',
           maxWidth: 1100,
@@ -283,8 +275,7 @@ function App() {
                 className="flight-card"
                 key={idx}
                 style={{
-                  background: '#fff',
-                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.97)',
                   boxShadow: '0 4px 24px 0 rgba(60,80,120,0.10)',
                   padding: '28px 32px',
                   minWidth: 320,
