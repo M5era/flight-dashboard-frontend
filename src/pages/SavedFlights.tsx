@@ -1,4 +1,3 @@
-import React from 'react';
 
 const SavedFlights = () => {
   // This is a placeholder for now.

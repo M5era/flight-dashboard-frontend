@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchFlights } from './api';
-import { hashItinerary } from './api';
 import type { FlightSegment } from './api';
 import './App.css';
 
@@ -23,11 +22,6 @@ function App() {
         // Optionally revert UI if needed
       });
     } else {
-      async function saveFlight(itinerary: object) {
-        const id = await hashItinerary(itinerary);
-        // Save flight with id
-        // ...existing save logic...
-      }
 
       import('./api').then(api => api.deleteSavedFlight(String(flightId))).catch(e => {
         alert('Failed to delete saved flight: ' + (e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e)));

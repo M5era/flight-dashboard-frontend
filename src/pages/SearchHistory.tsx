@@ -1,4 +1,3 @@
-import React from 'react';
 
 const SearchHistory = () => {
   // This is a placeholder for now.

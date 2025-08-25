@@ -120,7 +120,11 @@ export const saveFlight = async (flight: FlightSegment): Promise<any> => {
   const token = getToken();
   if (!token) throw new Error('You must be logged in to save flights.');
 
-  // The endpoint seems to be /api/user/saved-flights from your curl command
+  // Hash the itinerary to generate a unique ID
+  const itineraryToHash = flight.segments;
+  const id = await hashItinerary(itineraryToHash);
+  const flightWithHash = { ...flight, id };
+
   const apiUrl = import.meta.env.VITE_API_URL;
   const response = await fetch(`${apiUrl}/api/user/saved-flights`, {
     method: 'POST',
@@ -128,8 +132,7 @@ export const saveFlight = async (flight: FlightSegment): Promise<any> => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    // The backend expects the original flight object, not a simplified one
-    body: JSON.stringify(flight),
+    body: JSON.stringify(flightWithHash),
   });
 
   if (!response.ok) {
